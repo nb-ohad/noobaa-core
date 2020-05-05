@@ -217,6 +217,7 @@ function create_endpoint_handler(rpc, internal_rpc_client, options) {
     }
 
     const object_io = new ObjectIO(LOCATION_INFO);
+    const rpc_client = rpc.new_client();
     return endpoint_request_handler;
 
     function endpoint_request_handler(req, res) {
@@ -231,17 +232,17 @@ function create_endpoint_handler(rpc, internal_rpc_client, options) {
         http_utils.parse_url_query(req);
 
         if (req.url.startsWith('/2015-03-31/functions')) {
-            req.func_sdk = new FuncSDK(rpc.new_client());
+            req.func_sdk = new FuncSDK(rpc_client);
             return lambda_rest_handler(req, res);
         }
 
         if (req.headers['x-ms-version']) {
-            req.object_sdk = new ObjectSDK(rpc.new_client(), internal_rpc_client, object_io);
+            req.object_sdk = new ObjectSDK(rpc_client, internal_rpc_client, object_io);
             return blob_rest_handler(req, res);
         }
 
         req.virtual_hosts = VIRTUAL_HOSTS;
-        req.object_sdk = new ObjectSDK(rpc.new_client(), internal_rpc_client, object_io);
+        req.object_sdk = new ObjectSDK(rpc_client, internal_rpc_client, object_io);
         return s3_rest_handler(req, res);
     }
 }
