@@ -21,6 +21,8 @@ const AccountSpaceNetStorage = require('./accountspace_net_storage');
 const AccountSpaceNB = require('./accountspace_nb');
 const stats_collector = require('./endpoint_stats_collector');
 
+const mutils = require('../util/measurement_utils');
+
 const bucket_namespace_cache = new LRUCache({
     name: 'ObjectSDK-Bucket-Namespace-Cache',
     expiry_ms: 0,
@@ -90,14 +92,21 @@ class ObjectSDK {
 
     async _load_bucket_namespace(params) {
         // params.bucket might be added by _validate_bucket_namespace
-        const bucket = params.bucket || await this.internal_rpc_client.bucket.read_bucket_sdk_info({ name: params.name });
+        const bucket = params.bucket || await mutils.wrap_promise(
+            '_load_bucket_namespace',
+            this.internal_rpc_client.bucket.read_bucket_sdk_info({ name: params.name })
+        );
         return this._setup_bucket_namespace(bucket);
     }
 
     async _validate_bucket_namespace(data, params) {
         const time = Date.now();
         if (time <= data.valid_until) return true;
-        const bucket = await this.internal_rpc_client.bucket.read_bucket_sdk_info({ name: params.name });
+        const bucket = await mutils.wrap_promise(
+            '_validate_bucket_namespace',
+            this.internal_rpc_client.bucket.read_bucket_sdk_info({ name: params.name })
+        );
+
         if (_.isEqual(bucket, data.bucket)) {
             // namespace unchanged - extend validity for another period
             data.valid_until = time + NAMESPACE_CACHE_EXPIRY;

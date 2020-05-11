@@ -6,6 +6,8 @@ const stream = require('stream');
 
 const nb_native = require('./nb_native');
 
+const mutils = require('../util/measurement_utils');
+
 /**
  *
  * ChunkSplitter
@@ -49,12 +51,15 @@ class ChunkSplitter extends stream.Transform {
         try {
             this.split(null, err => {
                 if (err) return callback(err);
+                const h = mutils.start_measurement('ChunkSplitter._flush - nb_native');
                 try {
                     const res = nb_native().chunk_splitter(this.state);
+                    mutils.end_measurement(h);
                     this.md5 = res.md5;
                     this.sha256 = res.sha256;
                     return callback();
                 } catch (err2) {
+                    mutils.discard_measurement(h);
                     return callback(err2);
                 }
             });
@@ -72,11 +77,16 @@ class ChunkSplitter extends stream.Transform {
                 return callback();
             }
         }
+        const h = mutils.start_measurement('ChunkSplitter.split - nb_native');
         nb_native().chunk_splitter(
             this.state,
             this.pending_split,
             (err, split_points) => {
-                if (err) return callback(err);
+                if (err) {
+                    mutils.discard_measurement(h);
+                    return callback(err);
+                }
+                mutils.end_measurement(h);
                 this.pending_split = input_buf ? [] : null;
                 this.pending_split_len = 0;
                 var index = 0;

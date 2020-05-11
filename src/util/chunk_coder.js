@@ -7,6 +7,8 @@ const P = require('./promise');
 const Semaphore = require('./semaphore');
 const nb_native = require('./nb_native');
 
+const mutils = require('../util/measurement_utils');
+
 /**
  *
  * ChunkCoder
@@ -40,18 +42,21 @@ class ChunkCoder extends stream.Transform {
     // - global_sem limits the global concurrency by all streams in the process.
     //
     // The reason we need stream_sem is to avoid starvation by one stream to other streams.
-    // 
+    //
     // Under the semaphores we do the following:
     // - Submit the chunk for coding.
     // - Wait for the chunk coding and also the previous chunks before pushing down the stream to keep stream order.
-    // - We *synchronously* call the transform stream callback because we want to accept more incoming chunks 
+    // - We *synchronously* call the transform stream callback because we want to accept more incoming chunks
     //      from the stream which will call _transform in concurrency - the semaphores will limit it.
     // - We return the chunk coder promise so that the semaphores will wait for it.
     _transform(chunk, encoding, callback) {
         this.stream_sem.surround(() => ChunkCoder.global_sem.surround(() => {
                 chunk.chunk_coder_config = chunk.chunk_coder_config || this.chunk_coder_config;
                 if (this.cipher_key_b64) chunk.cipher_key_b64 = this.cipher_key_b64;
-                const chunk_promise = P.fromCallback(cb => nb_native().chunk_coder(this.coder, chunk, cb));
+                const chunk_promise = mutils.wrap_promise(
+                    'ChunkCoder - nb_native',
+                    P.fromCallback(cb => nb_native().chunk_coder(this.coder, chunk, cb))
+                );
                 // TODO: Need to remove the cipher_key in case of SSE-C
                 this.stream_promise = P.join(chunk_promise, this.stream_promise).then(() => this.push(chunk));
                 callback();

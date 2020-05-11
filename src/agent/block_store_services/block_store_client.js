@@ -16,6 +16,8 @@ const config = require('../../../config');
 const { RPC_BUFFERS, RpcError } = require('../../rpc');
 const { get_block_internal_dir } = require('../../agent/block_store_services/block_store_base');
 
+const mutils = require('../../util/measurement_utils');
+
 const block_store_info_cache = new LRUCache({
     name: 'BlockStoreInfoCache',
     max_usage: 1000,
@@ -293,7 +295,7 @@ class BlockStoreClient {
                     _.isUndefined);
                 const s3 = new AWS.S3(s3_params);
                 write_params.Body = data;
-                await s3.putObject(write_params).promise();
+                await mutils.wrap_promise('AWS S3 putObject', s3.putObject(write_params).promise());
                 const data_length = data.length;
                 const usage = data_length ? {
                     size: (block_md.is_preallocated ? 0 : data_length) + encoded_md.length,

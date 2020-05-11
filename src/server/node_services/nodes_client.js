@@ -10,6 +10,8 @@ const mongo_utils = require('../../util/mongo_utils');
 const node_allocator = require('./node_allocator');
 const system_store = require('../system_services/system_store').get_instance();
 
+const mutils = require('../../util/measurement_utils');
+
 const NODE_FIELDS_FOR_MAP = Object.freeze([
     'name',
     'pool',
@@ -113,7 +115,9 @@ class NodesClient {
 
 
     aggregate_data_free_by_tier(tier_ids, system_id) {
-        return server_rpc.client.node.aggregate_data_free_by_tier({
+        return mutils.wrap_promise(
+            'aggregate_data_free_by_tier - rpc call',
+            server_rpc.client.node.aggregate_data_free_by_tier({
                 tier_ids: tier_ids,
             }, {
                 auth_token: auth_server.make_auth_token({
@@ -121,7 +125,7 @@ class NodesClient {
                     role: 'admin'
                 })
             })
-            .then(res => _.mapValues(_.keyBy(res, 'tier_id'), 'mirrors_storage'));
+        ).then(res => _.mapValues(_.keyBy(res, 'tier_id'), 'mirrors_storage'));
     }
 
     collect_agent_diagnostics(node_identity, system_id) {
@@ -205,8 +209,9 @@ class NodesClient {
             dbg.error('allocate_nodes: expected system_id. pool_id', pool_id);
             throw new Error('allocate_nodes: expected system_id');
         }
-
-        return P.resolve(server_rpc.client.node.allocate_nodes({
+        return mutils.wrap_promise(
+            'allocate_nodes: rpc call to node server',
+            P.resolve(server_rpc.client.node.allocate_nodes({
                 pool_id: String(pool_id),
                 fields: NODE_FIELDS_FOR_MAP
             }, {
@@ -215,7 +220,7 @@ class NodesClient {
                     role: 'admin'
                 })
             }))
-            .tap(res => res.latency_groups.forEach(group => mongo_utils.fix_id_type(group.nodes)));
+        ).tap(res => res.latency_groups.forEach(group => mongo_utils.fix_id_type(group.nodes)));
     }
 
     /**

@@ -14,6 +14,7 @@ const http_utils = require('../../util/http_utils');
 const s3_utils = require('./s3_utils');
 const net = require('net');
 const signature_utils = require('../../util/signature_utils');
+const mutils = require('../../util/measurement_utils');
 
 const S3_MAX_BODY_LEN = 4 * 1024 * 1024;
 
@@ -96,7 +97,7 @@ let usage_report = new_usage_report();
 
 async function s3_rest(req, res) {
     try {
-        await handle_request(req, res);
+        await mutils.wrap_promise('s3_rest', handle_request(req, res));
     } catch (err) {
         if (req.bucket_website_info) {
             await handle_website_error(req, res, err);

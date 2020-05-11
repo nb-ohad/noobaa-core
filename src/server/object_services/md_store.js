@@ -26,6 +26,7 @@ const data_block_schema = require('./schemas/data_block_schema');
 const data_block_indexes = require('./schemas/data_block_indexes');
 const config = require('../../../config');
 
+const mutils = require('../../util/measurement_utils');
 
 class MDStore {
 
@@ -122,13 +123,19 @@ class MDStore {
 
     async insert_object(info) {
         this._objects.validate(info);
-        return this._objects.col().insertOne(info);
+        return mutils.wrap_promise(
+            'MDStore.insert_object - insertOne call',
+            this._objects.col().insertOne(info)
+        );
     }
 
     async update_object_by_id(obj_id, set_updates, unset_updates, inc_updates) {
         dbg.log('update_object_by_id:', obj_id, compact_updates(set_updates, unset_updates, inc_updates));
-        const res = await this._objects.col().updateOne({ _id: obj_id },
-            compact_updates(set_updates, unset_updates, inc_updates)
+        const res = await mutils.wrap_promise(
+            'MDStore.update_object_by_id - updateOne call',
+            this._objects.col().updateOne({ _id: obj_id },
+                compact_updates(set_updates, unset_updates, inc_updates)
+            )
         );
         mongo_utils.check_update_one(res, 'object');
     }
@@ -153,7 +160,10 @@ class MDStore {
      * @returns {Promise<nb.ObjectMD>}
      */
     async find_object_by_id(obj_id) {
-        return this._objects.col().findOne({ _id: obj_id });
+        return mutils.wrap_promise(
+            'MDStore.find_object_by_id',
+            this._objects.col().findOne({ _id: obj_id })
+        );
     }
 
     /**
@@ -192,18 +202,21 @@ class MDStore {
     }
 
     async find_object_null_version(bucket_id, key) {
-        return this._objects.col().findOne({
-            // index fields:
-            bucket: bucket_id,
-            key,
-            version_enabled: null,
-            // partialFilterExpression:
-            deleted: null,
-            upload_started: null,
-        }, {
-            hint: 'null_version_index',
-            sort: { bucket: 1, key: 1, version_enabled: 1 },
-        });
+        return mutils.wrap_promise(
+            'MDStore.find_object_null_version - findOne call',
+            this._objects.col().findOne({
+                // index fields:
+                bucket: bucket_id,
+                key,
+                version_enabled: null,
+                // partialFilterExpression:
+                deleted: null,
+                upload_started: null,
+            }, {
+                hint: 'null_version_index',
+                sort: { bucket: 1, key: 1, version_enabled: 1 },
+            })
+        );
     }
 
     async find_object_by_version(bucket_id, key, version_seq) {
@@ -411,9 +424,15 @@ class MDStore {
         const options = { upsert: true };
         // if the first update returns null it means we just inserted the doc for the first time
         // so we just call again in order to increase the sequence and get the first seq.
-        let res = await this._sequences.col().findOneAndUpdate(query, update, options);
+        let res = await mutils.wrap_promise(
+            'MDStore.alloc_object_version_seq - findOneAndUpdate 1th call',
+            this._sequences.col().findOneAndUpdate(query, update, options)
+        );
         if (res && res.value && res.value.object_version_seq) return res.value.object_version_seq;
-        res = await this._sequences.col().findOneAndUpdate(query, update, options);
+        res = await mutils.wrap_promise(
+            'MDStore.alloc_object_version_seq - findOneAndUpdate 2nd call',
+            this._sequences.col().findOneAndUpdate(query, update, options)
+        );
         return res.value.object_version_seq;
     }
 
@@ -1031,7 +1050,10 @@ class MDStore {
         for (const part of parts) {
             this._parts.validate(part);
         }
-        return this._parts.col().insertMany(parts, unordered_insert_options());
+        return mutils.wrap_promise(
+            'MDStore.insert_parts - insertMany call',
+            this._parts.col().insertMany(parts, unordered_insert_options())
+        );
     }
 
     /**
@@ -1177,7 +1199,10 @@ class MDStore {
      * @returns {Promise<nb.PartSchemaDB[]>}
      */
     async find_all_parts_of_object(obj) {
-        return this._parts.col().find({ obj: obj._id, deleted: null }).toArray();
+        return mutils.wrap_promise(
+            'MDStore.find_all_parts_of_object - find call',
+            this._parts.col().find({ obj: obj._id, deleted: null }).toArray()
+        );
     }
 
     update_parts_in_bulk(parts_updates) {
@@ -1186,7 +1211,10 @@ class MDStore {
             bulk.find({ _id: update._id })
                 .updateOne(compact_updates(update.set_updates, update.unset_updates));
         }
-        return bulk.length ? bulk.execute() : P.resolve();
+        return bulk.length ? mutils.wrap_promise(
+            'MDStore.update_parts_in_bulk - bulk.execute call',
+            bulk.execute()
+        ) : P.resolve();
     }
 
     delete_parts_of_object(obj) {
@@ -1230,7 +1258,10 @@ class MDStore {
         for (const chunk of chunks) {
             this._chunks.validate(chunk);
         }
-        return this._chunks.col().insertMany(chunks, unordered_insert_options());
+        return mutils.wrap_promise(
+            'MDStore.insert_chunks - insertMany call',
+            this._chunks.col().insertMany(chunks, unordered_insert_options())
+        );
     }
 
     update_chunk_by_id(chunk_id, set_updates) {
@@ -1274,7 +1305,9 @@ class MDStore {
      */
     async find_chunks_by_dedup_key(bucket, dedup_keys) {
         /** @type {nb.ChunkSchemaDB[]} */
-        const chunks = await this._chunks.col().find({
+        const chunks = await mutils.wrap_promise(
+            'MDStore.find_chunks_by_dedup_key - find call',
+            this._chunks.col().find({
                 system: bucket.system._id,
                 bucket: bucket._id,
                 dedup_key: {
@@ -1286,7 +1319,8 @@ class MDStore {
                     _id: -1 // get newer chunks first
                 }
             })
-            .toArray();
+            .toArray()
+        );
         await this.load_blocks_for_chunks(chunks);
         return chunks;
     }
@@ -1556,7 +1590,10 @@ class MDStore {
         for (const block of blocks) {
             this._blocks.validate(block);
         }
-        return this._blocks.col().insertMany(blocks, unordered_insert_options());
+        return mutils.wrap_promise(
+            'MDStore.insert_blocks - insertMany call',
+            this._blocks.col().insertMany(blocks, unordered_insert_options())
+        );
     }
 
     update_blocks_by_ids(block_ids, set_updates, unset_updates) {
