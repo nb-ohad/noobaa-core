@@ -33,6 +33,9 @@ const auth_server = require('../server/common_services/auth_server');
 const server_rpc = require('../server/server_rpc');
 const { ENDPOINT_MONITOR_INTERVAL } = require('../../config');
 
+const mutils = require('../util/measurement_utils');
+const fs = require('fs');
+
 const {
     ENDPOINT_BLOB_ENABLED,
     ENDPOINT_FTP_ENABLED,
@@ -127,8 +130,25 @@ async function run_server(options) {
         // Start a monitor to send periodic endpoint reports about endpoint usage.
         start_monitor(internal_rpc_client);
 
+        report_measurements();
     } catch (err) {
         handle_server_error(err);
+    }
+}
+
+async function report_measurements() {
+    for (;;) {
+        await promise_utils.delay_unblocking(60 * 1000);
+        const raw = mutils.export_measurements();
+        const report = mutils.produce_report();
+        try {
+            Promise.all([
+                await fs.promises.writeFile('./m_samples.log', raw, 'utf8'),
+                await fs.promises.writeFile('./m_report.log', report, 'utf8')
+            ]);
+        } catch (err) {
+            console.warn('Could not save measurement reports, err:', err);
+        }
     }
 }
 
